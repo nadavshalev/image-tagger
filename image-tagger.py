@@ -6,7 +6,10 @@ from datetime import datetime
 from PIL import Image, ImageTk, ImageOps, ExifTags
 import shutil
 
+
 class ToolTip:
+    """Class to create and manage tooltips for widgets."""
+
     def __init__(self, widget, text):
         self.widget = widget
         self.text = text
@@ -15,6 +18,7 @@ class ToolTip:
         self.widget.bind("<Leave>", self.hide_tooltip)
 
     def show_tooltip(self, event=None):
+        """Display the tooltip when the mouse enters the widget."""
         if self.tip_window or not self.text:
             return
         x, y, _, _ = self.widget.bbox("insert")
@@ -29,11 +33,15 @@ class ToolTip:
         label.pack(ipadx=1, ipady=1)
 
     def hide_tooltip(self, event=None):
+        """Hide the tooltip when the mouse leaves the widget."""
         if self.tip_window:
             self.tip_window.destroy()
             self.tip_window = None
 
+
 class ImageTagger:
+    """Main class for the Image Tagger application."""
+
     def __init__(self, root):
         self.root = root
         self.root.title("Image Tagger")
@@ -49,11 +57,16 @@ class ImageTagger:
         self.create_login_screen()
 
         # Bind keyboard events
+        self.bind_keyboard_events()
+
+    def bind_keyboard_events(self):
+        """Bind keyboard shortcuts for navigation and liking images."""
         self.root.bind('<Left>', lambda e: self.move_image(-1))
         self.root.bind('<Right>', lambda e: self.move_image(1))
         self.root.bind('1', lambda e: self.toggle_like())
 
     def create_login_screen(self):
+        """Create the login screen for the user to enter their name and select a folder."""
         self.login_frame = tk.Frame(self.root, padx=20, pady=20)
         self.login_frame.pack(expand=True)
 
@@ -69,6 +82,7 @@ class ImageTagger:
         self.root.bind('<Return>', lambda e: select_button.invoke())
 
     def select_folder(self):
+        """Handle folder selection and proceed to load images."""
         self.folder_path = filedialog.askdirectory()
         if self.folder_path and self.name_entry.get():
             self.tagger_name = self.name_entry.get()
@@ -77,86 +91,98 @@ class ImageTagger:
             self.login_frame.destroy()
             self.create_main_interface()
 
-
     def load_images(self):
-        # Get all image files and sort by EXIF DateTimeOriginal
+        """Load and sort images from the selected folder."""
         image_extensions = ('.jpg', '.jpeg', '.png', '.gif')
         self.images = []
+
         for file in os.listdir(self.folder_path):
             if file.lower().endswith(image_extensions):
                 file_path = os.path.join(self.folder_path, file)
-                try:
-                    # Open the image and extract EXIF data
-                    image = Image.open(file_path)
-                    exif_data = image._getexif()
-                    if exif_data:
-                        # Get the DateTimeOriginal tag
-                        for tag, value in ExifTags.TAGS.items():
-                            if value == "DateTimeOriginal":
-                                date_taken = exif_data.get(tag)
-                                break
-                        else:
-                            date_taken = None
-                    else:
-                        date_taken = None
-                except Exception:
-                    date_taken = None
-
-                # Fallback to file creation time if EXIF data is unavailable
-                if date_taken:
-                    # Convert EXIF date format (e.g., "2023:03:15 12:34:56") to a timestamp
-                    date_taken = datetime.strptime(date_taken, "%Y:%m:%d %H:%M:%S").timestamp()
-                else:
-                    date_taken = os.path.getctime(file_path)
-
+                date_taken = self.get_image_date(file_path)
                 self.images.append((file_path, date_taken))
 
-        # Sort by the extracted date
+        # Sort images by date
         self.images.sort(key=lambda x: x[1])
         self.images = [img[0] for img in self.images]
 
+    def get_image_date(self, file_path):
+        """Extract the date the image was taken or fallback to file creation time."""
+        try:
+            image = Image.open(file_path)
+            exif_data = image._getexif()
+            if exif_data:
+                for tag, value in ExifTags.TAGS.items():
+                    if value == "DateTimeOriginal":
+                        date_taken = exif_data.get(tag)
+                        break
+                else:
+                    date_taken = None
+            else:
+                date_taken = None
+
+            if date_taken:
+                return datetime.strptime(date_taken, "%Y:%m:%d %H:%M:%S").timestamp()
+        except Exception:
+            pass
+
+        return os.path.getctime(file_path)
+
     def load_likes(self):
+        """Load liked images from a JSON file."""
         likes_file = f"{self.tagger_name}_likes.json"
         if os.path.exists(likes_file):
             with open(likes_file, 'r') as f:
                 self.liked_images = set(json.load(f))
 
     def save_likes(self):
+        """Save liked images to a JSON file."""
         likes_file = f"{self.tagger_name}_likes.json"
         with open(likes_file, 'w') as f:
             json.dump(list(self.liked_images), f)
 
-
     def create_main_interface(self):
-        # Main frame
+        """Create the main interface for tagging images."""
         self.main_frame = tk.Frame(self.root, padx=10, pady=10)
         self.main_frame.pack(expand=True, fill="both")
 
-        # Title
+        self.create_title()
+        self.create_image_display()
+        self.create_status_bar()
+        self.create_progress_bar()
+        self.create_navigation_buttons()
+        self.create_like_button()
+        self.create_additional_buttons()
+
+        # Show the first image
+        self.show_current_image()
+
+    def create_title(self):
+        """Create the title label."""
         tk.Label(self.main_frame, text="Image Tagger", font=("Arial", 16, "bold")).pack(pady=10)
 
-        # Image display
+    def create_image_display(self):
+        """Create the image display area."""
         self.image_label = tk.Label(self.main_frame, bg="gray", width=960, height=520)
         self.image_label.pack(pady=10)
 
-        # Status bar
+    def create_status_bar(self):
+        """Create the status bar to display image information."""
         self.status_label = tk.Label(self.main_frame, text="", font=("Arial", 10))
         self.status_label.pack(pady=5)
 
-        # Progress bar
+    def create_progress_bar(self):
+        """Create the progress bar for image navigation."""
         self.progress_var = tk.IntVar()
         self.progress = ttk.Progressbar(
             self.main_frame, orient="horizontal", length=400, mode="determinate", variable=self.progress_var
         )
         self.progress.pack(pady=5)
-
-        # Set the maximum value of the progress bar
         self.progress["maximum"] = len(self.images) - 1
-
-        # Bind dragging event to update the image
         self.progress.bind("<ButtonRelease-1>", self.update_image_from_progress)
 
-        # Navigation buttons (Next and Previous)
+    def create_navigation_buttons(self):
+        """Create navigation buttons for moving between images."""
         nav_frame = tk.Frame(self.main_frame)
         nav_frame.pack(pady=10)
 
@@ -166,73 +192,80 @@ class ImageTagger:
         next_button = tk.Button(nav_frame, text="Next ⏩", command=lambda: self.move_image(1), font=("Arial", 10))
         next_button.pack(side=tk.LEFT, padx=5)
 
-        # Like button (centered and larger)
-        self.like_button = tk.Button(self.main_frame, text="🤍 Like", command=self.toggle_like, font=("Arial", 14, "bold"),
-                                width=10, bg="lightgray")
-        self.like_button.pack(pady=20)
+        ToolTip(prev_button, "Shortcut: Left Arrow")
+        ToolTip(next_button, "Shortcut: Right Arrow")
 
-        # Additional buttons (rarely used)
+    def create_like_button(self):
+        """Create the like button."""
+        self.like_button = tk.Button(
+            self.main_frame, text="🤍 Like", command=self.toggle_like, font=("Arial", 14, "bold"),
+            width=10, bg="lightgray"
+        )
+        self.like_button.pack(pady=20)
+        ToolTip(self.like_button, "Shortcut: 1")
+
+    def create_additional_buttons(self):
+        """Create additional buttons for jumping to liked images and exporting."""
         additional_frame = tk.Frame(self.main_frame)
         additional_frame.pack(pady=10)
 
-        jump_button = tk.Button(additional_frame, text="Jump to Last Liked", command=self.jump_to_last_liked,
-                                font=("Arial", 10))
+        jump_button = tk.Button(
+            additional_frame, text="Jump to Last Liked", command=self.jump_to_last_liked, font=("Arial", 10)
+        )
         jump_button.pack(side=tk.LEFT, padx=5)
 
-        export_button = tk.Button(additional_frame, text="FINISH (Export Liked Images)", command=self.export_liked_images,
-                                  font=("Arial", 10))
+        export_button = tk.Button(
+            additional_frame, text="FINISH (Export Liked Images)", command=self.export_liked_images, font=("Arial", 10)
+        )
         export_button.pack(side=tk.LEFT, padx=5)
 
-        # Add tooltips to buttons
-        ToolTip(prev_button, "Shortcut: Left Arrow")
-        ToolTip(next_button, "Shortcut: Right Arrow")
-        ToolTip(self.like_button, "Shortcut: 1")
         ToolTip(export_button, "Export to a folder inside the current folder")
 
-        # Show first image
-        self.show_current_image()
-
     def show_current_image(self):
+        """Display the current image and update the UI."""
         if not self.images:
             return
 
-        # Load and resize image
         image = Image.open(self.images[self.current_index])
-
-        # Correct orientation using EXIF metadata
         image = ImageOps.exif_transpose(image)
-
-        # Calculate resize dimensions maintaining aspect ratio
         display_size = (800, 600)
         image.thumbnail(display_size, Image.Resampling.LANCZOS)
 
-        # Convert to PhotoImage
         photo = ImageTk.PhotoImage(image)
         self.image_label.config(image=photo)
-        self.image_label.image = photo  # Keep a reference
+        self.image_label.image = photo
 
-        # Update progress bar
+        self.update_progress_bar()
+        self.update_status()
+        self.update_like_button()
+
+    def update_progress_bar(self):
+        """Update the progress bar to reflect the current image index."""
         self.progress["value"] = (self.current_index + 1) / len(self.images) * 100
 
-        # Update status
-        liked_status = "❤️ Liked" if self.images[self.current_index] in self.liked_images else "Not liked"
+    def update_status(self):
+        """Update the status label with the current image information."""
         self.status_label.config(
             text=f"Image {self.current_index + 1} of {len(self.images)}"
         )
 
-        # Update Like button appearance
+    def update_like_button(self):
+        """Update the like button appearance based on the current image's like status."""
         if self.images[self.current_index] in self.liked_images:
             self.like_button.config(text="❤️ Liked", bg="lightgreen")
         else:
             self.like_button.config(text="🤍 Like", bg="lightgray")
 
     def move_image(self, delta):
+        """Move to the next or previous image."""
         new_index = self.current_index + delta
         if 0 <= new_index < len(self.images):
             self.current_index = new_index
+            self.progress_var.set(new_index)  # Update the progress bar value
             self.show_current_image()
 
     def toggle_like(self):
+        """Toggle the like status of the current image."""
         current_image = self.images[self.current_index]
         if current_image in self.liked_images:
             self.liked_images.remove(current_image)
@@ -242,37 +275,32 @@ class ImageTagger:
         self.show_current_image()
 
     def update_image_from_progress(self, event):
-        # Get the x-coordinate of the mouse relative to the progress bar
+        """Update the current image based on the progress bar position."""
         progress_width = self.progress.winfo_width()
         click_x = event.x
-
-        # Calculate the new progress value as a percentage
         new_value = max(0, min(click_x / progress_width, 1)) * (len(self.images) - 1)
-
-        # Convert to an integer index
         new_index = int(new_value)
 
         if 0 <= new_index < len(self.images):
             self.current_index = new_index
             self.progress_var.set(new_index)
             self.show_current_image()
-        else:
-            print("New index is out of bounds")
 
     def jump_to_last_liked(self):
-        # Find the last liked image after current position
+        """Jump to the last liked image."""
         for i in range(len(self.images) - 1, -1, -1):
             if self.images[i] in self.liked_images:
                 self.current_index = i
+                self.progress_var.set(self.current_index)  # Update the progress bar value
                 self.show_current_image()
                 break
 
     def export_liked_images(self):
+        """Export liked images to a folder."""
         if not self.liked_images:
             messagebox.showinfo("Info", "No liked images to export!")
             return
 
-        # Filter liked images to include only those in the current folder
         current_folder_liked_images = {
             image_path for image_path in self.liked_images if image_path.startswith(self.folder_path)
         }
@@ -289,6 +317,7 @@ class ImageTagger:
             shutil.copy2(image_path, os.path.join(export_folder, filename))
 
         messagebox.showinfo("Success", f"Exported {len(current_folder_liked_images)} images to {export_folder}")
+
 
 if __name__ == "__main__":
     root = tk.Tk()
