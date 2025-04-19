@@ -34,7 +34,7 @@ The application is built using the `tkinter` library for the graphical user inte
 ## Usage
 ### Run the application:
    ```bash
-   python image_tagger.py
+   python image-tagger.py
    ```
 ### Start new session:
 1. Insert your name in the input field 
